@@ -1,0 +1,48 @@
+upstream gateway_pool {
+    least_time header;
+    server apigateway.service;
+}
+
+server {
+    listen 81;
+    listen 443 ssl;
+    server_name loadbalance.service;
+
+    ssl_certificate     /etc/nginx/ssl/certs/loadbalance.service.crt;
+    ssl_certificate_key /etc/nginx/ssl/private/loadbalance.service.key;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 5m;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_protocols       TLSv1.1 TLSv1.2;  
+    
+    if ($in_sinbin) {
+        set $limit_rate 1;
+    }
+ 
+    limit_req zone=per_ip;
+    error_page 429 = @send_to_sinbin;
+
+    location / {
+      
+       # return 200 gateway_pool$request_uri;
+       # return 200 apigateway.service$request_uri;
+       
+          proxy_pass http://apigateway.service;
+     
+
+       #  proxy_pass http://gateway_pool;  
+       #  proxy_pass http://apigateway.service$request_uri;
+    }
+    
+    location @send_to_sinbin {
+        rewrite ^ /api/3/http/keyvals/sinbin break;
+        proxy_method POST;
+        proxy_set_body '{"$remote_addr"}';
+        proxy_pass http://loadbalance.service;
+    }
+
+    location /api/ {
+        api write=on;
+    }
+
+}
